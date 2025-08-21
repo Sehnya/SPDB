@@ -1,0 +1,17 @@
+.gitignore
+
+.env
+
+# Ignore compiled Python files
+*.pyc
+__pycache__/
+
+# Ignore Node.js dependency directory
+node_modules/
+
+# Ignore log files
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
