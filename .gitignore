@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # dependencies (bun install)
 node_modules
 
@@ -32,3 +33,22 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+=======
+.gitignore
+
+.env
+
+# Ignore compiled Python files
+*.pyc
+__pycache__/
+
+# Ignore Node.js dependency directory
+node_modules/
+
+# Ignore log files
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+>>>>>>> 3f5c467fb32ddf7ca49044befd239212afd91769
