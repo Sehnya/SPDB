@@ -18,7 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await upstream.json();
 
     if (data?.status === "error") {
-      return res.status(502).json({ error: true, message: data?.message || "Upstream time_series error" });
+      // Return 200 with empty series to avoid breaking the client (useful for demo key restrictions)
+      return res.status(200).json({ error: true, message: data?.message || "Upstream time_series error", symbol, interval, series: [] });
     }
 
     // Normalize to simple arrays for charting

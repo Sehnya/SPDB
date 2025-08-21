@@ -145,9 +145,10 @@ const server = serve({
         const data = await upstream.json();
 
         if ((data as any)?.status === "error") {
+          // Return 200 with empty series to avoid breaking client UX during demo-key restrictions
           return new Response(
-            JSON.stringify({ error: true, message: (data as any)?.message || "Upstream time_series error" }),
-            { status: 502, headers: { "Content-Type": "application/json" } },
+            JSON.stringify({ error: true, message: (data as any)?.message || "Upstream time_series error", symbol, interval, series: [] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
           );
         }
 

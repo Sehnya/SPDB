@@ -11,7 +11,7 @@ CORS(app, origins=(['*', 'localhost:8080', '127.0.0.1:8080']))
 td = TDClient(apikey=os.getenv('API_KEY'))
 
 ts = td.time_series(
-    symbol="AAPL,MSFT,GOOGL,AMZN, NVDA",
+    symbol="AAPL",
     interval="1min",
     outputsize=10,
     timezone="America/New_York",
