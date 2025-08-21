@@ -17,6 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const upstream = await fetch(url.toString());
     const data = await upstream.json();
 
+    if (data?.status === "error") {
+      return res.status(502).json({ error: true, message: data?.message || "Upstream time_series error" });
+    }
+
     // Normalize to simple arrays for charting
     const series = Array.isArray(data?.values)
       ? data.values.map((d: any) => ({ t: d.datetime, c: Number(d.close) }))

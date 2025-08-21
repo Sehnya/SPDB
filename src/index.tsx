@@ -39,45 +39,82 @@ const server = serve({
           .slice(0, 20); // safety limit
 
         const apikey = process.env.API_KEY || "demo"; // TwelveData supports a demo key
-        const tdUrl = new URL("https://api.twelvedata.com/quote");
-        tdUrl.searchParams.set("symbol", symbols.join(","));
-        tdUrl.searchParams.set("apikey", apikey);
 
-        const upstream = await fetch(tdUrl.toString());
-        const data = await upstream.json();
+        const toNumber = (x: any) => (typeof x === "string" ? Number(x.replace(/%/g, "")) || 0 : Number(x) || 0);
 
-        // TwelveData returns either an object (single symbol) or a map of symbol->quote for multiple
-        let normalized: Array<{ symbol: string; price: number; change_percent: number; updated?: string }>; 
-
-        if (Array.isArray(data?.data)) {
-          // Some plans may return { data: [...] }
-          normalized = data.data.map((d: any) => ({
-            symbol: d.symbol,
-            price: Number(d.price ?? d.close ?? d.last ?? 0),
-            change_percent: Number((d.percent_change ?? d.change_percent ?? d.change) || 0),
-            updated: d.datetime || d.timestamp || d.last_trade_time,
-          }));
-        } else if (data && typeof data === "object" && (data.symbol || data.name || data.price)) {
-          // Single-object response
-          normalized = [
-            {
-              symbol: data.symbol ?? symbols[0],
-              price: Number(data.price ?? data.close ?? data.last ?? 0),
-              change_percent: Number((data.percent_change ?? data.change_percent ?? data.change) || 0),
-              updated: data.datetime || data.timestamp || data.last_trade_time,
-            },
-          ];
-        } else {
-          // Map of symbol->quote
-          normalized = symbols.map(sym => {
-            const d = data?.[sym];
+        const normalizeBatch = (symbols: string[], data: any) => {
+          if (!data || typeof data !== "object") return [] as any[];
+          if (Array.isArray(data.data)) {
+            return data.data.map((d: any) => ({
+              symbol: d.symbol,
+              price: toNumber(d.price ?? d.close ?? d.last),
+              change_percent: toNumber(d.percent_change ?? d.change_percent ?? d.change),
+              updated: d.datetime || d.timestamp || d.last_trade_time,
+            }));
+          }
+          if (data.symbol || data.name || data.price) {
+            return [
+              {
+                symbol: data.symbol ?? symbols[0],
+                price: toNumber(data.price ?? data.close ?? data.last),
+                change_percent: toNumber(data.percent_change ?? data.change_percent ?? data.change),
+                updated: data.datetime || data.timestamp || data.last_trade_time,
+              },
+            ];
+          }
+          return symbols.map(sym => {
+            const d = (data as any)?.[sym];
             return {
               symbol: sym,
-              price: Number(d?.price ?? d?.close ?? d?.last ?? 0),
-              change_percent: Number((d?.percent_change ?? d?.change_percent ?? d?.change) || 0),
+              price: toNumber(d?.price ?? d?.close ?? d?.last),
+              change_percent: toNumber(d?.percent_change ?? d?.change_percent ?? d?.change),
               updated: d?.datetime || d?.timestamp || d?.last_trade_time,
             };
           });
+        };
+
+        const fetchQuoteBatch = async (symbols: string[]) => {
+          const tdUrl = new URL("https://api.twelvedata.com/quote");
+          tdUrl.searchParams.set("symbol", symbols.join(","));
+          tdUrl.searchParams.set("apikey", apikey);
+          const upstream = await fetch(tdUrl.toString());
+          return upstream.json();
+        };
+
+        const fetchQuoteSingle = async (sym: string) => {
+          const tdUrl = new URL("https://api.twelvedata.com/quote");
+          tdUrl.searchParams.set("symbol", sym);
+          tdUrl.searchParams.set("apikey", apikey);
+          const upstream = await fetch(tdUrl.toString());
+          return upstream.json();
+        };
+
+        const batch = await fetchQuoteBatch(symbols);
+        const isError = batch?.status === "error" || (batch?.code && batch?.message);
+        let normalized = isError ? [] : normalizeBatch(symbols, batch);
+        const allZeroOrEmpty = normalized.length === 0 || normalized.every(r => !r.price);
+
+        if (isError || allZeroOrEmpty) {
+          const results = await Promise.all(
+            symbols.map(async sym => {
+              try {
+                const d = await fetchQuoteSingle(sym);
+                if (d?.status === "error") return null;
+                const r = normalizeBatch([sym], d)[0];
+                return r && r.price ? r : null;
+              } catch {
+                return null;
+              }
+            }),
+          );
+          normalized = results.filter(Boolean) as typeof normalized;
+        }
+
+        if (!normalized.length) {
+          return new Response(
+            JSON.stringify({ error: true, message: "Upstream quote API returned no data" }),
+            { status: 502, headers: { "Content-Type": "application/json" } },
+          );
         }
 
         return Response.json({ symbols, data: normalized });
@@ -106,6 +143,13 @@ const server = serve({
 
         const upstream = await fetch(tdUrl.toString());
         const data = await upstream.json();
+
+        if ((data as any)?.status === "error") {
+          return new Response(
+            JSON.stringify({ error: true, message: (data as any)?.message || "Upstream time_series error" }),
+            { status: 502, headers: { "Content-Type": "application/json" } },
+          );
+        }
 
         const series = Array.isArray((data as any)?.values)
           ? (data as any).values.map((d: any) => ({ t: d.datetime, c: Number(d.close) }))
